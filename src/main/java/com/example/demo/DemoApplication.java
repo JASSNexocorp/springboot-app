@@ -18,4 +18,9 @@ class HelloController {
     public String hello() {
         return "Hello CI/CD World!";
     }
+
+    @GetMapping("/health")
+    public String health() {
+        return "Health check OK";
+    }
 }
