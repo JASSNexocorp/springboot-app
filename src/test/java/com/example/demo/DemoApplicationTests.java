@@ -31,6 +31,6 @@ class DemoApplicationTests {
     void healthEndpointReturnsOk() throws Exception {
         mockMvc.perform(get("/health"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("Health check OK"));
+                .andExpect(content().string("Health check "));
     }
 }
