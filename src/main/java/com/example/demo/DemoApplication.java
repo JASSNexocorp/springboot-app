@@ -1,11 +1,11 @@
 package com.example.demo;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.env.Environment;
 
 @SpringBootApplication
 public class DemoApplication {
@@ -18,7 +18,7 @@ public class DemoApplication {
 class HelloController {
 
     @Autowired
-    private Enviroment environment;
+    private Environment environment;
 
     @GetMapping("/")
     public String hello() {
