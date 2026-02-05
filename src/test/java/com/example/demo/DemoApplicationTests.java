@@ -25,13 +25,14 @@ class DemoApplicationTests {
     void helloEndpointReturnsMessage() throws Exception {
         mockMvc.perform(get("/"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("Hello CI/CD World!"));
+                .andExpect(content().string("Hello CI/CD World! - Entrega Final"));
     }
 
     @Test
     void healthEndpointReturnsOk() throws Exception {
         mockMvc.perform(get("/health"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("Health check "));
+                .andExpect(content().string("Health check passed!"));
     }
+
 }
