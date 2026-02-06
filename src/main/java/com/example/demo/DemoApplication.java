@@ -35,4 +35,9 @@ class HelloController {
         String port = environment.getProperty("local.server.port");
         return "Instancia corriendo en el puerto: " + port;
     }
+
+    @GetMapping("/version")
+    public String version() {
+        return "Versión Servicio CI/CD: 1.0502.2026";
+    }
 }
