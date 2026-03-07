@@ -38,6 +38,6 @@ class HelloController {
 
     @GetMapping("/version")
     public String version() {
-        return "Versión Servicio CI/CD: 2.0603.2026";
+        return "Versión Servicio CI/CD: 3.0603.2026";
     }
 }
