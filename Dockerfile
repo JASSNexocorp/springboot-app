@@ -6,6 +6,7 @@ FROM maven:3.9-eclipse-temurin-11-alpine AS builder
 WORKDIR /build
 
 # Copiar solo archivos de dependencias primero (mejor caché)
+
 # [Checkov - Error 1] Usar COPY en lugar de ADD (CKV_DOCKER_4)
 ADD pom.xml .
 RUN mvn dependency:go-offline -B
