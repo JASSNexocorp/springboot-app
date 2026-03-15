@@ -1,0 +1,22 @@
+# Build (el JAR se genera dentro del contenedor)
+target/
+
+# Git e IDE
+.git
+.gitignore
+.idea
+*.iml
+.vscode
+*.swp
+*.swo
+
+# Docs y otros
+README.md
+*.md
+Dockerfile*
+.dockerignore
+
+# Tests y reportes (no necesarios en imagen final)
+**/test-output
+**/jacoco.exec
+**/surefire-reports
