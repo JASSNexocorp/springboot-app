@@ -2,6 +2,8 @@ package com.example.demo;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import javax.crypto.Cipher;
@@ -16,7 +18,28 @@ import java.util.Base64;
 @RequestMapping("/owasp")
 public class OwaspDemoController {
 
-    // A01: Broken Access Control - ejemplo 1 y 2
+    // ========== SAST (Semgrep) - 2 errores intencionales para detección ==========
+    // SAST 1 - A02:2021 Cryptographic Failures / secretos en código (Semgrep: hardcoded-credentials)
+    @SuppressWarnings("unused")
+    private static final String API_KEY = "sk-live-51a3b2c4d5e6f7890abcdef1234567890";
+
+    // SAST 2 - A03:2021 Injection (XSS); devolver input sin sanitizar (Semgrep: reflected XSS / output not encoded)
+    @GetMapping("/sast/reflect")
+    public String sastReflectedXss(@RequestParam(value = "q", defaultValue = "") String q) {
+        return "Resultado de búsqueda: " + q;
+    }
+
+    // ========== DAST (OWASP ZAP) - 2 errores fáciles de detectar ==========
+    // DAST 1 - A03:2021 Injection - XSS reflejado en HTML (ZAP Passive/Active Scan)
+    @GetMapping(value = "/dast/xss", produces = MediaType.TEXT_HTML_VALUE)
+    public ResponseEntity<String> dastReflectedXss(@RequestParam(value = "search", defaultValue = "") String search) {
+        String html = "<html><body><h1>Búsqueda</h1><p>Tu búsqueda: " + search + "</p></body></html>";
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType(MediaType.TEXT_HTML_VALUE)).body(html);
+    }
+
+    // DAST 2 - A03:2021 Injection - SQL Injection (ver /owasp/injection/sql más abajo); ZAP lo detecta con active scan.
+
+    // ========== A01: Broken Access Control - ejemplo 1 y 2 ==========
 
     // Ejemplo 1: endpoint administrativo sin verificación de rol
     @DeleteMapping("/admin/users/{id}")
@@ -90,9 +113,7 @@ public class OwaspDemoController {
         return Base64.getEncoder().encodeToString(encrypted);
     }
 
-    // A05: Injection
-
-    // Ejemplo 1: SQL Injection usando concatenación de parámetros
+    // A03:2021 Injection - DAST 2 (OWASP ZAP): SQL Injection con concatenación; ZAP lo detecta en active scan.
     @GetMapping("/injection/sql")
     public String sqlInjection(@RequestParam("username") String username) {
         StringBuilder result = new StringBuilder();

@@ -33,12 +33,14 @@
       <artifactId>h2</artifactId>
       <scope>runtime</scope>
     </dependency>
-    <!-- Dependencias intencionalmente vulnerables o antiguas para pruebas de cadena de suministro (A03) -->
+    <!-- SCA (Trivy + OWASP Dependency-Check) - 2 dependencias vulnerables - A06:2021 Vulnerable and Outdated Components -->
+    <!-- SCA 1: log4j-core 2.14.0 - CVE-2021-44228 (Log4Shell) y otras -->
     <dependency>
       <groupId>org.apache.logging.log4j</groupId>
       <artifactId>log4j-core</artifactId>
       <version>2.14.0</version>
     </dependency>
+    <!-- SCA 2: commons-collections 3.2.1 - CVE-2015-6420 (deserialización) -->
     <dependency>
       <groupId>commons-collections</groupId>
       <artifactId>commons-collections</artifactId>
