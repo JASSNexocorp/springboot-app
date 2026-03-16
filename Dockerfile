@@ -21,8 +21,11 @@ RUN java -Djarmode=layertools -jar target/demo-0.0.1-SNAPSHOT.jar extract
 # ============================================
 # Etapa 2: Imagen final mínima para ejecución
 # ============================================
-# [Trivy - Error 1] Base antigua con CVEs conocidos
-FROM eclipse-temurin:11-jre-focal
+FROM eclipse-temurin:11-jre-alpine
+
+# [Trivy - Error 1] libssl1.1 tiene CVEs conocidos en Alpine
+# [Trivy - Error 2] wget version antigua tiene CVEs conocidos
+RUN apk add --no-cache curl libssl1.1 wget=1.21.1-r1
 
 # [Trivy - Error 2] Paquete con CVEs - solo para que Trivy lo detecte, la app no lo usa
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
