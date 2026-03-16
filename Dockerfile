@@ -35,4 +35,4 @@ EXPOSE 8080
 
 # [Checkov - Error 2] Falta HEALTHCHECK (CKV_DOCKER_2)
 
-ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
+ENTRYPOINT ["java", "org.springframework.boot.loader.JarLauncher"]
