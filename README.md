@@ -1,5 +1,4 @@
-Laboratorio 3: Spring Boot + Jenkins + DevSecOps
-=================================================
+# Proyecto Final – DevSecOps en CI/CD : Spring Boot + Jenkins + DevSecOps
 
 Este repositorio contiene una aplicación de ejemplo en **Spring Boot** con un pipeline de **CI/CD en Jenkins** y **errores de seguridad intencionales** para practicar:
 
@@ -90,7 +89,7 @@ Archivo: `OwaspDemoController.java`
   - **Qué buscar en el IDE:** `API_KEY`
   - **Tipo:** A02:2021 Cryptographic Failures.
   - **Por qué es un error:** una clave secreta no debe ir en el código; debe venir de variables de entorno o un gestor de secretos.
-  - **Cómo se detecta:** reglas de **Semgrep** para *hardcoded secrets*.
+  - **Cómo se detecta:** reglas de **Semgrep** para _hardcoded secrets_.
 
 - **SAST 2 – Reflected XSS en endpoint**
   - **Qué buscar en el IDE:** `/owasp/sast/reflect`
@@ -185,9 +184,9 @@ En este laboratorio, **PaC** se representa principalmente con:
 
 **Qué buscar en el IDE para ubicar esta lógica:**
 
-- Archivo: `Jenkinsfile`  
+- Archivo: `Jenkinsfile`
   - Buscar: `semgrep`, `trivy`, `dependency-check`, `zap`.
-- Archivo: `delploy.sh` / `delploy.sh.modulo4Final`  
+- Archivo: `delploy.sh` / `delploy.sh.modulo4Final`
   - Buscar: `trivy`, `kubectl`, `policy`.
 
 La idea es que el **pipeline se comporte como “código de políticas”**: si se detectan problemas de seguridad definidos por la organización, el pipeline falla y no se continúa con el despliegue.

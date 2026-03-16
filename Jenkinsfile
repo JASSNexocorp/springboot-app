@@ -173,7 +173,7 @@ pipeline {
         }
 
         // ----------------------------------------------------------
-        // 6. IMAGE CHECKER — ahora si tiene imagen real
+        // 6. IMAGE CHECKER 
         // ----------------------------------------------------------
         stage('Image Checker - Trivy') {
             steps {

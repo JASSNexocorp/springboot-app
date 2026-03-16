@@ -17,7 +17,7 @@ RUN pip3 install semgrep --break-system-packages
 RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
     | sh -s -- -b /usr/local/bin
 
-# PaC: OWASP Dependency-Check 
+# SCA: OWASP Dependency-Check 
 RUN curl -sL \
     "https://github.com/jeremylong/DependencyCheck/releases/download/v10.0.4/dependency-check-10.0.4-release.zip" \
     -o /tmp/depcheck.zip \
@@ -33,6 +33,9 @@ RUN curl -L \
     && mv /opt/ZAP_2.16.1 /opt/zap \
     && rm /tmp/zap.tar.gz \
     && ln -s /opt/zap/zap.sh /usr/local/bin/zap.sh
+
+# PaC: Checkov
+RUN pip3 install checkov --break-system-packages
 
 USER jenkins
 
