@@ -126,9 +126,59 @@ dependency-check.sh --project demo -s .
 
 ### 3.3. Image Checker (imágenes Docker – Trivy)
 
-Archivo: `contenedores/jenkins-devsecops/Dockerfile`
+En este laboratorio tienes **dos Dockerfile importantes**:
 
-Ejemplos de “errores” intencionales:
+- `Dockerfile` (raíz del proyecto) → imagen de la **aplicación Spring Boot**.
+- `contenedores/jenkins-devsecops/Dockerfile` → imagen de **Jenkins DevSecOps** con herramientas de seguridad.
+
+#### 3.3.1. Dockerfile de la aplicación (`Dockerfile` en la raíz)
+
+Este archivo construye la imagen de la app en dos etapas (builder + runtime) y contiene **errores intencionales** para que los detecten **Trivy** y **Checkov (PaC)**:
+
+- **Error Docker 1 – Uso de `ADD` en lugar de `COPY`**
+  - **Línea:** `ADD pom.xml .`
+  - **Qué buscar en el IDE:** `ADD pom.xml .`
+  - **Herramienta:** **Checkov** – regla `CKV_DOCKER_4`.
+  - **Por qué es un problema:** `ADD` hace más cosas de las necesarias (descomprime, soporta URLs remotas) y se considera mala práctica de seguridad cuando solo necesitas copiar archivos locales.
+
+- **Error Docker 2 – Instalar `curl` con posibles CVEs**
+  - **Línea:** `RUN apk add --no-cache curl`
+  - **Qué buscar en el IDE:** `apk add --no-cache curl`
+  - **Herramienta:** **Trivy** (Image Scanner).
+  - **Por qué es un problema:** al añadir paquetes extra, aumentas la superficie de ataque y Trivy puede reportar vulnerabilidades asociadas a `curl` o a la imagen base.
+
+- **Error Docker 3 – Ejecutar el contenedor como root**
+  - **Línea:** **no hay** instrucción `USER`, por lo que se ejecuta como root.
+  - **Qué buscar en el IDE:** el comentario `# Sin USER — corre como root`.
+  - **Herramienta:** **Trivy** y linters de Docker.
+  - **Por qué es un problema:** correr como root es una mala práctica (mayor impacto si hay explotación).
+
+- **Error Docker 4 – No definir `HEALTHCHECK`**
+  - **Línea:** comentario `# [Checkov - Error 2] Falta HEALTHCHECK (CKV_DOCKER_2)`
+  - **Qué buscar en el IDE:** `HEALTHCHECK` o el comentario `CKV_DOCKER_2`.
+  - **Herramienta:** **Checkov** – `CKV_DOCKER_2`.
+  - **Por qué es un problema:** sin `HEALTHCHECK`, orquestadores como Docker/Kubernetes no pueden saber si el contenedor está sano.
+
+**Comandos de ejemplo (Windows CMD, en la raíz del proyecto):**
+
+```cmd
+cd "C:\Users\jsahonero\Desktop\DIPLOMADO\MODULO 4\SpringBoot_CI_CD_Lab\springboot-app"
+docker build -t demo-app .
+trivy image demo-app
+checkov -f Dockerfile
+```
+
+#### 3.3.2. Dockerfile de Jenkins DevSecOps (`contenedores/jenkins-devsecops/Dockerfile`)
+
+Este archivo define una imagen de Jenkins con todas las herramientas de seguridad:
+
+- **Semgrep** → SAST.
+- **Trivy** → SCA + Image Checker.
+- **OWASP Dependency-Check** → SCA / PaC de dependencias.
+- **OWASP ZAP** → DAST.
+- **Checkov** → PaC para infraestructura/Docker/Kubernetes.
+
+Ejemplos de “errores” o puntos de atención intencionales:
 
 - Instalación de muchas herramientas en la misma imagen (`maven`, `docker.io`, ZAP, etc.).
 - Uso de paquetes del sistema que pueden quedar desactualizados con vulnerabilidades.
@@ -139,6 +189,7 @@ Ejemplos de “errores” intencionales:
 - `docker.io`
 - `trivy`
 - `zap.sh`
+- `checkov`
 
 **Por qué serán detectados:**
 
