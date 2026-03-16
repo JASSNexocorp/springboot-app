@@ -16,7 +16,7 @@ pipeline {
     }
 
     environment {
-        // false = QA  → ejecuta todo, nunca corta el pipeline
+        // false = QA  → ejecuta todo, nunca corta el pipelinee
         // true  = PROD → corta si encuentra Critical/High/Medium
         IS_PRODUCTION = 'false'
 
