@@ -1,0 +1,340 @@
+// ============================================================
+// PIPELINE DEVSECOPS — Spring Boot
+// ============================================================
+
+pipeline {
+    agent any
+
+    triggers {
+        githubPush()
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+        timeout(time: 2, unit: 'HOURS')
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        // false = QA  → ejecuta todo, nunca corta el pipeline
+        // true  = PROD → corta si encuentra Critical/High/Medium
+        IS_PRODUCTION = 'false'
+
+        APP_PORT    = '8089'
+        APP_URL     = 'http://localhost:8089'
+        REPORTS_DIR = 'security-reports'
+        CHECKOV_BIN = '/var/jenkins_home/.local/bin/checkov'
+
+        DD_PRODUCT   = 'springboot-app'
+        DD_TOKEN     = credentials('defectdojo-api-token')
+        DD_URL       = 'http://django-defectdojo-nginx-1:8080'
+
+        DD_ENG_SAST  = 'sast-semgrep'
+        DD_ENG_SCA   = 'sca-trivy-dependency-check'
+        DD_ENG_IMAGE = 'image-checker-trivy'
+        DD_ENG_DAST  = 'dast-owasp-zap'
+        DD_ENG_PAC   = 'pac-checkov'
+    }
+
+    stages {
+
+        stage('📥 Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/JASSNexocorp/springboot-app.git'
+            }
+        }
+
+        stage('🔨 Build') {
+            steps {
+                sh 'mvn clean package -DskipTests -q'
+            }
+        }
+
+        stage('1️⃣  SAST - Semgrep') {
+            steps {
+                script {
+                    sh '''
+                        mkdir -p ${REPORTS_DIR}
+                        echo "════════════════════════════"
+                        echo "  1️⃣  SAST - SEMGREP"
+                        echo "════════════════════════════"
+
+                        semgrep scan \
+                            --config auto \
+                            --json \
+                            --output ${REPORTS_DIR}/sast-semgrep.json \
+                            ./src 2>/dev/null || true
+
+                        FINDINGS=$(grep -c '"check_id"' ${REPORTS_DIR}/sast-semgrep.json 2>/dev/null || echo "0")
+                        echo "✅ SAST completado — Hallazgos: ${FINDINGS}"
+                    '''
+
+                    if (env.IS_PRODUCTION == 'true') {
+                        sh '''
+                            CRITICAL=$(grep -c '"severity":"ERROR"' ${REPORTS_DIR}/sast-semgrep.json 2>/dev/null || echo "0")
+                            HIGH=$(grep -c '"severity":"WARNING"' ${REPORTS_DIR}/sast-semgrep.json 2>/dev/null || echo "0")
+                            if [ "${CRITICAL}" -gt 0 ] || [ "${HIGH}" -gt 0 ]; then
+                                echo "❌ PROD: SAST encontró hallazgos críticos. Abortando."
+                                exit 1
+                            fi
+                            echo "✅ PROD Gate SAST: OK"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('2️⃣  SCA - Trivy + Dependency-Check') {
+            steps {
+                script {
+                    sh '''
+                        echo "════════════════════════════"
+                        echo "  2️⃣  SCA - TRIVY"
+                        echo "════════════════════════════"
+
+                        trivy fs \
+                            --format json \
+                            --output ${REPORTS_DIR}/sca-trivy.json \
+                            --scanners vuln \
+                            . 2>/dev/null || true
+
+                        echo "✅ Trivy completado"
+
+                        echo "════════════════════════════"
+                        echo "  2️⃣  SCA - DEPENDENCY-CHECK"
+                        echo "════════════════════════════"
+
+                        dependency-check \
+                            --project "${DD_PRODUCT}" \
+                            --scan . \
+                            --format JSON \
+                            --out ${REPORTS_DIR} \
+                            --disableAssembly \
+                            --noupdate 2>/dev/null || true
+
+                        echo "✅ Dependency-Check completado"
+                    '''
+
+                    if (env.IS_PRODUCTION == 'true') {
+                        sh '''
+                            CRITICAL=$(grep -c '"Severity":"CRITICAL"' ${REPORTS_DIR}/sca-trivy.json 2>/dev/null || echo "0")
+                            HIGH=$(grep -c '"Severity":"HIGH"' ${REPORTS_DIR}/sca-trivy.json 2>/dev/null || echo "0")
+                            MEDIUM=$(grep -c '"Severity":"MEDIUM"' ${REPORTS_DIR}/sca-trivy.json 2>/dev/null || echo "0")
+                            if [ "${CRITICAL}" -gt 0 ] || [ "${HIGH}" -gt 0 ] || [ "${MEDIUM}" -gt 0 ]; then
+                                echo "❌ PROD: SCA encontró vulnerabilidades. Abortando."
+                                exit 1
+                            fi
+                            echo "✅ PROD Gate SCA: OK"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('3️⃣  Image Checker - Trivy') {
+            steps {
+                script {
+                    sh '''
+                        echo "════════════════════════════"
+                        echo "  3️⃣  IMAGE CHECKER - TRIVY"
+                        echo "════════════════════════════"
+
+                        trivy config \
+                            --format json \
+                            --output ${REPORTS_DIR}/image-checker.json \
+                            . 2>/dev/null || true
+
+                        if [ ! -f "${REPORTS_DIR}/image-checker.json" ]; then
+                            echo '{"Results":[]}' > ${REPORTS_DIR}/image-checker.json
+                        fi
+
+                        echo "✅ Image Checker completado"
+                    '''
+
+                    if (env.IS_PRODUCTION == 'true') {
+                        sh '''
+                            CRITICAL=$(grep -c '"Severity":"CRITICAL"' ${REPORTS_DIR}/image-checker.json 2>/dev/null || echo "0")
+                            HIGH=$(grep -c '"Severity":"HIGH"' ${REPORTS_DIR}/image-checker.json 2>/dev/null || echo "0")
+                            MEDIUM=$(grep -c '"Severity":"MEDIUM"' ${REPORTS_DIR}/image-checker.json 2>/dev/null || echo "0")
+                            if [ "${CRITICAL}" -gt 0 ] || [ "${HIGH}" -gt 0 ] || [ "${MEDIUM}" -gt 0 ]; then
+                                echo "❌ PROD: Image Checker encontró misconfigs. Abortando."
+                                exit 1
+                            fi
+                            echo "✅ PROD Gate Image: OK"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('4️⃣  DAST - OWASP ZAP') {
+            steps {
+                script {
+                    sh '''
+                        echo "════════════════════════════"
+                        echo "  4️⃣  DAST - OWASP ZAP"
+                        echo "════════════════════════════"
+
+                        echo "⏳ Levantando app Spring Boot..."
+                        nohup java -jar target/*.jar \
+                            --server.port=${APP_PORT} \
+                            > ${REPORTS_DIR}/app.log 2>&1 &
+                        echo $! > /tmp/app.pid
+                        sleep 25
+
+                        if curl -s --max-time 5 "${APP_URL}" > /dev/null 2>&1; then
+                            echo "✅ App corriendo en ${APP_URL}"
+                        else
+                            echo "⚠️  App no responde, continuando con ZAP..."
+                        fi
+
+                        echo "🔍 Ejecutando ZAP..."
+                        zap.sh -cmd \
+                            -port 8090 \
+                            -quickurl ${APP_URL} \
+                            -quickprogress \
+                            -quickout $(pwd)/${REPORTS_DIR}/dast-zap.xml 2>/dev/null || true
+
+                        echo "✅ DAST completado"
+
+                        kill $(cat /tmp/app.pid) 2>/dev/null || true
+                        rm -f /tmp/app.pid
+                        echo "✅ App apagada"
+                    '''
+
+                    if (env.IS_PRODUCTION == 'true') {
+                        sh '''
+                            HIGH=$(grep -c 'riskcode="3"' ${REPORTS_DIR}/dast-zap.xml 2>/dev/null || echo "0")
+                            MEDIUM=$(grep -c 'riskcode="2"' ${REPORTS_DIR}/dast-zap.xml 2>/dev/null || echo "0")
+                            if [ "${HIGH}" -gt 0 ] || [ "${MEDIUM}" -gt 0 ]; then
+                                echo "❌ PROD: ZAP encontró vulnerabilidades. Abortando."
+                                exit 1
+                            fi
+                            echo "✅ PROD Gate DAST: OK"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('5️⃣  PAC - Checkov') {
+            steps {
+                script {
+                    sh '''
+                        echo "════════════════════════════"
+                        echo "  5️⃣  PAC - CHECKOV"
+                        echo "════════════════════════════"
+
+                        export PATH=$PATH:/var/jenkins_home/.local/bin
+
+                        ${CHECKOV_BIN} \
+                            --directory . \
+                            --output json \
+                            --skip-download \
+                            --quiet > ${REPORTS_DIR}/pac-checkov.json 2>/dev/null || true
+
+                        FAILED=$(grep -c '"result": "FAILED"' ${REPORTS_DIR}/pac-checkov.json 2>/dev/null || echo "0")
+                        PASSED=$(grep -c '"result": "PASSED"' ${REPORTS_DIR}/pac-checkov.json 2>/dev/null || echo "0")
+                        echo "✅ Checkov completado — Passed: ${PASSED} | Failed: ${FAILED}"
+                    '''
+
+                    if (env.IS_PRODUCTION == 'true') {
+                        sh '''
+                            FAILED=$(grep -c '"result": "FAILED"' ${REPORTS_DIR}/pac-checkov.json 2>/dev/null || echo "0")
+                            if [ "${FAILED}" -gt 0 ]; then
+                                echo "❌ PROD: Checkov encontró fallos. Abortando."
+                                exit 1
+                            fi
+                            echo "✅ PROD Gate PAC: OK"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('🚀 Importar en DefectDojo') {
+            steps {
+                script {
+                    sh '''
+                        set +e
+                        echo "════════════════════════════"
+                        echo "  🚀 IMPORTANDO EN DEFECTDOJO"
+                        echo "════════════════════════════"
+
+                        import_scan() {
+                            local scan_type=$1
+                            local file=$2
+                            local engagement=$3
+
+                            if [ ! -f "${file}" ]; then
+                                echo "   ⚠️  No encontrado: ${file}"
+                                return
+                            fi
+
+                            RESPONSE=$(curl -s -X POST \
+                                -H "Authorization: Token ${DD_TOKEN}" \
+                                -F "scan_type=${scan_type}" \
+                                -F "file=@${file}" \
+                                -F "product_name=${DD_PRODUCT}" \
+                                -F "engagement_name=${engagement}" \
+                                -F "active=true" \
+                                -F "verified=false" \
+                                "${DD_URL}/api/v2/import-scan/")
+
+                            if echo "${RESPONSE}" | grep -q '"test":'; then
+                                echo "   ✅ ${engagement} → ${scan_type}"
+                            else
+                                echo "   ⚠️  ${engagement} → Error: $(echo ${RESPONSE} | grep -o '"message":"[^"]*"')"
+                            fi
+                        }
+
+                        import_scan "Semgrep JSON Report"  "${REPORTS_DIR}/sast-semgrep.json"           "${DD_ENG_SAST}"
+                        import_scan "Trivy Scan"           "${REPORTS_DIR}/sca-trivy.json"              "${DD_ENG_SCA}"
+                        import_scan "Dependency Check Scan" "${REPORTS_DIR}/dependency-check-report.json" "${DD_ENG_SCA}"
+                        import_scan "Trivy Scan"           "${REPORTS_DIR}/image-checker.json"          "${DD_ENG_IMAGE}"
+                        import_scan "ZAP Scan"             "${REPORTS_DIR}/dast-zap.xml"                "${DD_ENG_DAST}"
+                        import_scan "Checkov Scan"         "${REPORTS_DIR}/pac-checkov.json"            "${DD_ENG_PAC}"
+
+                        echo "✅ Importación completada"
+                        echo "🔗 http://localhost:8083/product/1/"
+                    '''
+                }
+            }
+        }
+
+        stage('📊 Resumen Final') {
+            steps {
+                sh '''
+                    echo ""
+                    echo "╔══════════════════════════════════════╗"
+                    echo "║   PIPELINE DEVSECOPS - COMPLETADO    ║"
+                    echo "╚══════════════════════════════════════╝"
+                    echo "  Modo: IS_PRODUCTION=${IS_PRODUCTION}"
+                    echo ""
+                    echo "  1️⃣  SAST          → Semgrep"
+                    echo "  2️⃣  SCA           → Trivy + Dependency-Check"
+                    echo "  3️⃣  Image Checker → Trivy"
+                    echo "  4️⃣  DAST          → OWASP ZAP"
+                    echo "  5️⃣  PAC           → Checkov"
+                    echo ""
+                    echo "  🔗 DefectDojo: http://localhost:8083/product/1/"
+                    echo "════════════════════════════════════════"
+                '''
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'kill $(cat /tmp/app.pid) 2>/dev/null || true'
+            archiveArtifacts artifacts: "${REPORTS_DIR}/**", allowEmptyArchive: true
+        }
+        success {
+            echo '✅ Pipeline completado exitosamente'
+        }
+        failure {
+            echo '❌ Pipeline falló — revisa los logs'
+        }
+    }
+}
