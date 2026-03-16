@@ -5,17 +5,13 @@ FROM maven:3.9-eclipse-temurin-11-alpine AS builder
 
 WORKDIR /build
 
-# Copiar solo archivos de dependencias primero (mejor caché)
-
-# [Checkov - Error 1] Usar COPY en lugar de ADD (CKV_DOCKER_4)
+# [Checkov - Error 1] ADD en lugar de COPY (CKV_DOCKER_4)
 ADD pom.xml .
 RUN mvn dependency:go-offline -B
 
-# Copiar código fuente y compilar
 COPY src ./src
 RUN mvn package -DskipTests -B
 
-# Extraer capas del JAR (Spring Boot Layered JAR)
 RUN java -Djarmode=layertools -jar target/demo-0.0.1-SNAPSHOT.jar extract
 
 # ============================================
@@ -23,28 +19,18 @@ RUN java -Djarmode=layertools -jar target/demo-0.0.1-SNAPSHOT.jar extract
 # ============================================
 FROM eclipse-temurin:11-jre-alpine
 
-# [Trivy - Error 1] openssl version antigua con CVEs conocidos
-# [Trivy - Error 2] libcrypto con CVEs conocidos
-RUN apk add --no-cache curl openssl=3.1.4-r1
-
-# [Trivy - Error 2] Paquete con CVEs - solo para que Trivy lo detecte, la app no lo usa
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Usuario no-root para seguridad
-RUN groupadd -g 1000 appgroup && \
-    useradd -u 1000 -g appgroup -m -s /bin/bash appuser
+# [Trivy - Error 1] curl con CVEs conocidos
+# [Trivy - Error 2] corriendo como root (mala practica detectada por Trivy)
+RUN apk add --no-cache curl
 
 WORKDIR /app
 
-# Copiar capas en orden óptimo (dependencias cambian menos → mejor caché)
 COPY --from=builder /build/dependencies/ ./
 COPY --from=builder /build/spring-boot-loader/ ./
 COPY --from=builder /build/snapshot-dependencies/ ./
 COPY --from=builder /build/application/ ./
 
-USER appuser
-
+# Sin USER — corre como root, Trivy y Checkov lo detectan
 EXPOSE 8080
 
 # [Checkov - Error 2] Falta HEALTHCHECK (CKV_DOCKER_2)
